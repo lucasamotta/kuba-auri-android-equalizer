@@ -10,9 +10,7 @@
 
 ---
 
-## 💡 Por que este projeto existe? (A História do Projeto)
-
-Comprei o **Kuba Auri** tendo como principal atrativo o cabo DSP USB-C programável. A possibilidade de carregar a assinatura de som gravada no próprio cabo é fantástica! Porém, no dia a dia, ter que ligar o computador e abrir o navegador apenas para alternar entre uma curva e outra era pouco prático.
+Comprei o **Kuba Auri** tendo como principal atrativo o cabo DSP USB-C até então não programável (sim, comprei na pré-venda). E a possibilidade de alterar a assinatura de som gravada no próprio cabo foi um upgrade surpresa fantástico! Porém, no dia a dia, ter que ligar o computador e abrir o navegador apenas para alternar entre uma curva e outra era pouco prático.
 
 A inspiração direta para este app veio de um post na comunidade [r/audiofiliabrasil](https://www.reddit.com/r/audiofiliabrasil/) no Reddit, onde o usuário compartilhou que havia criado um app desktop para Linux para uso próprio:  
 👉 [Post no Reddit: App de equalização para o Kuba Auri](https://www.reddit.com/r/audiofiliabrasil/comments/1xedk23/app_de_equaliza%C3%A7%C3%A3o_para_o_kuba_auri/)
