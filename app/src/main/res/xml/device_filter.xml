@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cabo Kuba Auri DSP (TTGK USB DSP Audio / Walkplay) -->
+    <!-- VID: 0x3302 (13058), PID: 0x8902 (35074) -->
+    <usb-device vendor-id="13058" product-id="35074" />
+</resources>

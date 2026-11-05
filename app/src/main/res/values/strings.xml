@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Kuba Equalizador</string>
+    <string name="cable_connected">Cabo conectado</string>
+    <string name="cable_disconnected">Cabo desconectado</string>
+    <string name="connect_cable">Conectar cabo</string>
+    <string name="apply_to_phone">Gravar no cabo</string>
+    <string name="confirm_title">Gravar no cabo</string>
+    <string name="confirm_message">Deseja gravar o perfil \"%1$s\" no cabo DSP do Kuba Auri? A equalização atual gravada no cabo será substituída.</string>
+</resources>

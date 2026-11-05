@@ -1,0 +1,43 @@
+*.iml
+.gradle
+/local.properties
+/.idea/
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+.kotlin
+
+# Built application files
+*.apk
+*.aar
+*.ap_
+*.aab
+
+# Files for the ART/Dalvik VM
+*.dex
+
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+app/build/
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Log Files
+*.log
+
+# Keystore files
+*.jks
+*.keystore
+
+# Temporary and cache files
+scratch/
+.system_generated/
