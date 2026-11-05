@@ -95,7 +95,7 @@ O projeto não se limitou a simulações. Todos os estágios foram validados com
 ### Passos de Instalação:
 1. Clone o repositório:
    ```bash
-   git clone https://github.com/SEU_USUARIO/kuba-auri-android-equalizer.git
+   git clone https://github.com/lucasamotta/kuba-auri-android-equalizer.git
    cd kuba-auri-android-equalizer
    ```
 2. Conecte seu dispositivo Android com a **Depuração USB ativada**.
