@@ -12,6 +12,8 @@ import audio.kuba.equalizer.dsp.PresetCategory
 import audio.kuba.equalizer.dsp.PresetRepository
 import audio.kuba.equalizer.usb.KubaUsbManager
 import audio.kuba.equalizer.usb.UsbConnectionState
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,9 +21,10 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class ScreenTab {
-    PRESETS, // Curvas oficiais
-    CUSTOM_EQ // Equalizador personalizado 10 bandas
+enum class ScreenTab(val title: String) {
+    PRESETS("Oficiais"),
+    CUSTOM_EQ("Equalizador"),
+    PARAMETRIC_EQ("Avançado")
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
@@ -30,6 +33,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val usbManager = KubaUsbManager(application)
     val connectionState: StateFlow<UsbConnectionState> = usbManager.connectionState
+    val isLiveSyncing: StateFlow<Boolean> = usbManager.isLiveSyncing
 
     // Aba ativa atual
     private val _currentTab = MutableStateFlow(ScreenTab.PRESETS)
@@ -43,9 +47,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedPreset = MutableStateFlow<Preset>(PresetRepository.defaultPreset)
     val selectedPreset: StateFlow<Preset> = _selectedPreset.asStateFlow()
 
-    // Ganhos das 10 bandas do equalizador personalizado em tempo real (-12.0 a +12.0 dB)
+    // Ganhos das 10 bandas do equalizador simples (-12.0 a +12.0 dB)
     private val _customGains = MutableStateFlow(DoubleArray(10) { 0.0 })
     val customGains: StateFlow<DoubleArray> = _customGains.asStateFlow()
+
+    // --- Equalizador Paramétrico Avançado (10 Bandas com Tipo, Frequência, Ganho, Q e Bypass) ---
+    val defaultParametricBands = listOf(
+        FilterBand.lowShelf(31.5, 0.0, 0.707),
+        FilterBand.peak(63.0, 0.0, 1.414),
+        FilterBand.peak(125.0, 0.0, 1.414),
+        FilterBand.peak(250.0, 0.0, 1.414),
+        FilterBand.peak(500.0, 0.0, 1.414),
+        FilterBand.peak(1000.0, 0.0, 1.414),
+        FilterBand.peak(2000.0, 0.0, 1.414),
+        FilterBand.peak(4000.0, 0.0, 1.414),
+        FilterBand.peak(8000.0, 0.0, 1.414),
+        FilterBand.highShelf(16000.0, 0.0, 0.707)
+    )
+
+    private val _parametricBands = MutableStateFlow(defaultParametricBands)
+    val parametricBands: StateFlow<List<FilterBand>> = _parametricBands.asStateFlow()
+
+    private val _selectedParametricBandIndex = MutableStateFlow(0)
+    val selectedParametricBandIndex: StateFlow<Int> = _selectedParametricBandIndex.asStateFlow()
 
     // ID do preset que está gravado na memória flash do cabo
     private val _appliedPresetId = MutableStateFlow<String?>(
@@ -73,15 +97,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setTab(tab: ScreenTab) {
         _currentTab.value = tab
-        if (tab == ScreenTab.CUSTOM_EQ) {
-            updateCustomLivePreset()
+        when (tab) {
+            ScreenTab.CUSTOM_EQ -> updateCustomLivePreset()
+            ScreenTab.PARAMETRIC_EQ -> updateParametricLivePreset()
+            ScreenTab.PRESETS -> {}
         }
     }
 
     fun selectPreset(preset: Preset) {
         _selectedPreset.value = preset
         prefs.edit().putString("selected_preset_id", preset.id).apply()
+
+        // Se o preset selecionado tiver bandas, sincroniza com os equalizadores
+        if (preset.bands.size == 10) {
+            _parametricBands.value = preset.bands
+            val gains = DoubleArray(10) { i -> preset.bands[i].gainDb }
+            _customGains.value = gains
+        }
     }
+
+    // === Operações do Equalizador Simples (10 Bandas) ===
 
     fun updateCustomBandGain(index: Int, gainDb: Double) {
         if (index !in 0 until 10) return
@@ -104,7 +139,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val livePreset = Preset(
             id = "custom_live",
             name = "Personalizado",
-            description = "Equalização paramétrica em tempo real",
+            description = "Equalização 10 bandas",
             category = PresetCategory.CUSTOM,
             target = "JM-1",
             preDb = pre,
@@ -112,6 +147,76 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
         _selectedPreset.value = livePreset
     }
+
+    // === Operações do Equalizador Avançado (Paramétrico Estilo Voicemeeter) ===
+
+    fun setParametricBandIndex(index: Int) {
+        if (index in 0 until 10) {
+            _selectedParametricBandIndex.value = index
+        }
+    }
+
+    fun updateParametricBand(index: Int, band: FilterBand) {
+        if (index !in 0 until 10) return
+        val currentList = _parametricBands.value.toMutableList()
+        currentList[index] = band
+        _parametricBands.value = currentList
+        updateParametricLivePreset()
+    }
+
+    fun updateParametricBandType(index: Int, type: FilterType) {
+        if (index !in 0 until 10) return
+        val b = _parametricBands.value[index]
+        updateParametricBand(index, b.copy(type = type))
+    }
+
+    fun updateParametricBandFrequency(index: Int, frequency: Double) {
+        if (index !in 0 until 10) return
+        val b = _parametricBands.value[index]
+        updateParametricBand(index, b.copy(frequency = frequency.coerceIn(20.0, 20000.0)))
+    }
+
+    fun updateParametricBandGain(index: Int, gainDb: Double) {
+        if (index !in 0 until 10) return
+        val b = _parametricBands.value[index]
+        updateParametricBand(index, b.copy(gainDb = gainDb.coerceIn(-15.0, 15.0)))
+    }
+
+    fun updateParametricBandQ(index: Int, q: Double) {
+        if (index !in 0 until 10) return
+        val b = _parametricBands.value[index]
+        updateParametricBand(index, b.copy(q = q.coerceIn(0.1, 15.0)))
+    }
+
+    fun toggleParametricBandEnabled(index: Int) {
+        if (index !in 0 until 10) return
+        val b = _parametricBands.value[index]
+        updateParametricBand(index, b.copy(enabled = !b.enabled))
+    }
+
+    fun resetParametricEq() {
+        _parametricBands.value = defaultParametricBands
+        updateParametricLivePreset()
+    }
+
+    private fun updateParametricLivePreset() {
+        val bands = _parametricBands.value
+        val maxPositiveGain = bands.filter { it.enabled && it.type.hasGain }.maxOfOrNull { it.gainDb } ?: 0.0
+        val pre = if (maxPositiveGain > 0.0) -maxPositiveGain.coerceAtMost(12.0) else 0.0
+
+        val livePreset = Preset(
+            id = "param_live",
+            name = "Avançado",
+            description = "Equalizador paramétrico personalizado",
+            category = PresetCategory.CUSTOM,
+            target = "JM-1",
+            preDb = pre,
+            bands = bands
+        )
+        _selectedPreset.value = livePreset
+    }
+
+    // === Diálogos e Persistência de Presets ===
 
     fun openSavePresetDialog() {
         _showSavePresetDialog.value = true
@@ -124,9 +229,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveCustomPreset(name: String, description: String = "") {
         val trimmedName = name.trim().ifEmpty { "Personalizado ${_customPresets.value.size + 1}" }
         val trimmedDesc = description.trim().ifEmpty { "Equalização criada pelo usuário" }
-        val gains = _customGains.value.copyOf()
-        val bands = CustomEqConstants.createBands(gains)
-        val pre = CustomEqConstants.calculateAutoPreDb(gains)
+
+        val isParametric = _currentTab.value == ScreenTab.PARAMETRIC_EQ
+        val bands = if (isParametric) {
+            _parametricBands.value
+        } else {
+            CustomEqConstants.createBands(_customGains.value)
+        }
+
+        val maxGain = bands.filter { it.enabled && it.type.hasGain }.maxOfOrNull { it.gainDb } ?: 0.0
+        val pre = if (maxGain > 0.0) -maxGain.coerceAtMost(12.0) else 0.0
 
         val newId = "custom_${System.currentTimeMillis()}"
         val newPreset = Preset(
@@ -204,11 +316,20 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val bands = mutableListOf<FilterBand>()
                 for (j in 0 until bandsJson.length()) {
                     val bObj = bandsJson.getJSONObject(j)
-                    val type = if (bObj.getString("t") == "LS") FilterType.LOW_SHELF else FilterType.PEAK
+                    val tStr = bObj.getString("t")
+                    val type = when (tStr) {
+                        "LS", "LOW_SHELF" -> FilterType.LOW_SHELF
+                        "HS", "HIGH_SHELF" -> FilterType.HIGH_SHELF
+                        "LP", "LOW_PASS" -> FilterType.LOW_PASS
+                        "HP", "HIGH_PASS" -> FilterType.HIGH_PASS
+                        "NC", "NOTCH" -> FilterType.NOTCH
+                        else -> FilterType.PEAK
+                    }
                     val f = bObj.getDouble("f")
                     val g = bObj.getDouble("g")
                     val q = bObj.getDouble("q")
-                    bands.add(FilterBand(type, f, g, q))
+                    val en = bObj.optBoolean("en", true)
+                    bands.add(FilterBand(type, f, g, q, en))
                 }
 
                 list.add(
@@ -242,10 +363,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val bandsArray = JSONArray()
                 for (b in p.bands) {
                     val bObj = JSONObject()
-                    bObj.put("t", if (b.type == FilterType.LOW_SHELF) "LS" else "PK")
+                    bObj.put("t", b.type.shortName)
                     bObj.put("f", b.frequency)
                     bObj.put("g", b.gainDb)
                     bObj.put("q", b.q)
+                    bObj.put("en", b.enabled)
                     bandsArray.put(bObj)
                 }
                 obj.put("bands", bandsArray)

@@ -48,10 +48,84 @@ object DspProtocol {
         return BiquadCoeffs(b0, b1, b2, a1, a2)
     }
 
+    /**
+     * Calcula coeficientes do filtro High Shelf.
+     */
+    fun highShelf(f: Double, g: Double, q: Double, fs: Double = DspConstants.SAMPLING_RATE_FS): BiquadCoeffs {
+        val a = 10.0.pow(g / 40.0)
+        val w = 2.0 * Math.PI * f / fs
+        val al = sin(w) / (2.0 * q)
+        val c = cos(w)
+        val s = 2.0 * sqrt(a) * al
+        val a0 = (a + 1.0) - (a - 1.0) * c + s
+        val b0 = a * ((a + 1.0) + (a - 1.0) * c + s) / a0
+        val b1 = -2.0 * a * ((a - 1.0) + (a + 1.0) * c) / a0
+        val b2 = a * ((a + 1.0) + (a - 1.0) * c - s) / a0
+        val a1 = 2.0 * ((a - 1.0) - (a + 1.0) * c) / a0
+        val a2 = ((a + 1.0) - (a - 1.0) * c - s) / a0
+        return BiquadCoeffs(b0, b1, b2, a1, a2)
+    }
+
+    /**
+     * Calcula coeficientes do filtro Passa-Baixa (Low-Pass).
+     */
+    fun lowPass(f: Double, q: Double, fs: Double = DspConstants.SAMPLING_RATE_FS): BiquadCoeffs {
+        val w = 2.0 * Math.PI * f / fs
+        val al = sin(w) / (2.0 * q)
+        val c = cos(w)
+        val a0 = 1.0 + al
+        val b0 = ((1.0 - c) / 2.0) / a0
+        val b1 = (1.0 - c) / a0
+        val b2 = ((1.0 - c) / 2.0) / a0
+        val a1 = (-2.0 * c) / a0
+        val a2 = (1.0 - al) / a0
+        return BiquadCoeffs(b0, b1, b2, a1, a2)
+    }
+
+    /**
+     * Calcula coeficientes do filtro Passa-Alta (High-Pass).
+     */
+    fun highPass(f: Double, q: Double, fs: Double = DspConstants.SAMPLING_RATE_FS): BiquadCoeffs {
+        val w = 2.0 * Math.PI * f / fs
+        val al = sin(w) / (2.0 * q)
+        val c = cos(w)
+        val a0 = 1.0 + al
+        val b0 = ((1.0 + c) / 2.0) / a0
+        val b1 = (-(1.0 + c)) / a0
+        val b2 = ((1.0 + c) / 2.0) / a0
+        val a1 = (-2.0 * c) / a0
+        val a2 = (1.0 - al) / a0
+        return BiquadCoeffs(b0, b1, b2, a1, a2)
+    }
+
+    /**
+     * Calcula coeficientes do filtro Rejeita-Faixa (Notch).
+     */
+    fun notch(f: Double, q: Double, fs: Double = DspConstants.SAMPLING_RATE_FS): BiquadCoeffs {
+        val w = 2.0 * Math.PI * f / fs
+        val al = sin(w) / (2.0 * q)
+        val c = cos(w)
+        val a0 = 1.0 + al
+        val b0 = 1.0 / a0
+        val b1 = (-2.0 * c) / a0
+        val b2 = 1.0 / a0
+        val a1 = (-2.0 * c) / a0
+        val a2 = (1.0 - al) / a0
+        return BiquadCoeffs(b0, b1, b2, a1, a2)
+    }
+
     fun getCoefficients(band: FilterBand): BiquadCoeffs {
+        if (!band.enabled) {
+            // Banda em bypass: filtro transparente / flat (b0=1, outros=0)
+            return BiquadCoeffs(1.0, 0.0, 0.0, 0.0, 0.0)
+        }
         return when (band.type) {
             FilterType.LOW_SHELF -> lowShelf(band.frequency, band.gainDb, band.q)
+            FilterType.HIGH_SHELF -> highShelf(band.frequency, band.gainDb, band.q)
             FilterType.PEAK -> peak(band.frequency, band.gainDb, band.q)
+            FilterType.LOW_PASS -> lowPass(band.frequency, band.q)
+            FilterType.HIGH_PASS -> highPass(band.frequency, band.q)
+            FilterType.NOTCH -> notch(band.frequency, band.q)
         }
     }
 
@@ -165,7 +239,12 @@ object DspProtocol {
             val numerator = nr * nr + ni * ni
             val denominator = dr * dr + di * di
             if (denominator > 0.0) {
-                db += 10.0 * log10(numerator / denominator)
+                val ratio = numerator / denominator
+                if (ratio > 1e-6) {
+                    db += 10.0 * log10(ratio)
+                } else {
+                    db += -60.0
+                }
             }
         }
         return db

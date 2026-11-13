@@ -53,9 +53,13 @@ class KubaUsbManager(private val context: Context) {
         context.getSystemService(Context.USB_SERVICE) as UsbManager
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val usbMutex = kotlinx.coroutines.sync.Mutex()
 
     private val _connectionState = MutableStateFlow<UsbConnectionState>(UsbConnectionState.Disconnected)
     val connectionState: StateFlow<UsbConnectionState> = _connectionState.asStateFlow()
+
+    private val _isLiveSyncing = MutableStateFlow(false)
+    val isLiveSyncing: StateFlow<Boolean> = _isLiveSyncing.asStateFlow()
 
     private var receiverRegistered = false
 
@@ -242,67 +246,84 @@ class KubaUsbManager(private val context: Context) {
 
     /**
      * Grava o preset selecionado no hardware do cabo DSP.
+     * @param preset Preset com as bandas e pré-amp calculados.
+     * @param isSilent Se true, executa em segundo plano sem disparar pop-ups ou sobrescrever o estado de conexão com spinners globais (ideal para audição em tempo real).
      */
-    suspend fun applyPreset(preset: Preset): Result<Unit> = withContext(Dispatchers.IO) {
-        val device = findKubaDevice()
-            ?: return@withContext Result.failure(IllegalStateException("Cabo Kuba Auri não encontrado. Conecte o cabo USB-C."))
-
-        if (!usbManager.hasPermission(device)) {
-            requestPermission(device)
-            return@withContext Result.failure(SecurityException("Permissão USB pendente. Autorize o acesso na janela do Android."))
-        }
-
-        val packets = try {
-            DspProtocol.buildPackets(preset.bands, preset.preDb)
-        } catch (e: Exception) {
-            Log.e(TAG, "Erro ao construir pacotes DSP: ${e.message}", e)
-            return@withContext Result.failure(e)
-        }
-
-        Log.i(TAG, "=== INICIANDO GRAVAÇÃO: ${preset.name} (${packets.size} pacotes) ===")
-
-        var connection: UsbDeviceConnection? = null
-
+    suspend fun applyPreset(preset: Preset, isSilent: Boolean = false): Result<Unit> = withContext(Dispatchers.IO) {
+        usbMutex.lock()
         try {
-            connection = usbManager.openDevice(device)
-                ?: return@withContext Result.failure(IllegalStateException("Não foi possível abrir comunicação com o cabo. Verifique a permissão USB."))
+            val device = findKubaDevice()
+                ?: return@withContext Result.failure(IllegalStateException("Cabo Kuba Auri não encontrado. Conecte o cabo USB-C."))
 
-            Log.d(TAG, "Conexão aberta com sucesso. Serial: ${connection.serial}")
-
-            // Tenta cada interface até encontrar uma que funcione
-            val result = tryAllInterfaces(connection, device, packets, preset)
-
-            if (result.isSuccess) {
-                Log.i(TAG, "Preset '${preset.name}' gravado com sucesso no DSP!")
-                val connectedState = UsbConnectionState.Success(preset.name)
-                _connectionState.value = connectedState
-
-                scope.launch {
-                    delay(2000)
-                    if (_connectionState.value is UsbConnectionState.Success) {
-                        _connectionState.value = UsbConnectionState.Connected(
-                            device,
-                            device.productName ?: "Cabo Kuba Auri DSP"
-                        )
-                    }
-                }
-            } else {
-                val msg = result.exceptionOrNull()?.message ?: "Falha na gravação"
-                Log.e(TAG, "Falha em todas as interfaces: $msg")
-                _connectionState.value = UsbConnectionState.Error(msg)
+            if (!usbManager.hasPermission(device)) {
+                requestPermission(device)
+                return@withContext Result.failure(SecurityException("Permissão USB pendente. Autorize o acesso na janela do Android."))
             }
 
-            result
+            val packets = try {
+                DspProtocol.buildPackets(preset.bands, preset.preDb)
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao construir pacotes DSP: ${e.message}", e)
+                return@withContext Result.failure(e)
+            }
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Erro crítico ao gravar preset: ${e.message}", e)
-            _connectionState.value = UsbConnectionState.Error(
-                message = e.message ?: "Erro desconhecido durante gravação USB",
-                throwable = e
-            )
-            Result.failure(e)
+            if (isSilent) {
+                _isLiveSyncing.value = true
+            } else {
+                Log.i(TAG, "=== INICIANDO GRAVAÇÃO: ${preset.name} (${packets.size} pacotes) ===")
+            }
+
+            var connection: UsbDeviceConnection? = null
+
+            try {
+                connection = usbManager.openDevice(device)
+                    ?: return@withContext Result.failure(IllegalStateException("Não foi possível abrir comunicação com o cabo. Verifique a permissão USB."))
+
+                val result = tryAllInterfaces(connection, device, packets, preset, isSilent)
+
+                if (result.isSuccess) {
+                    Log.i(TAG, "Preset '${preset.name}' gravado com sucesso no DSP!")
+                    if (!isSilent) {
+                        val connectedState = UsbConnectionState.Success(preset.name)
+                        _connectionState.value = connectedState
+
+                        scope.launch {
+                            delay(2000)
+                            if (_connectionState.value is UsbConnectionState.Success) {
+                                _connectionState.value = UsbConnectionState.Connected(
+                                    device,
+                                    device.productName ?: "Cabo Kuba Auri DSP"
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    val msg = result.exceptionOrNull()?.message ?: "Falha na gravação"
+                    Log.e(TAG, "Falha em todas as interfaces: $msg")
+                    if (!isSilent) {
+                        _connectionState.value = UsbConnectionState.Error(msg)
+                    }
+                }
+
+                result
+
+            } catch (e: Exception) {
+                Log.e(TAG, "Erro ao gravar preset: ${e.message}", e)
+                if (!isSilent) {
+                    _connectionState.value = UsbConnectionState.Error(
+                        message = e.message ?: "Erro desconhecido durante gravação USB",
+                        throwable = e
+                    )
+                }
+                Result.failure(e)
+            } finally {
+                if (isSilent) {
+                    _isLiveSyncing.value = false
+                }
+                try { connection?.close() } catch (ignored: Exception) {}
+            }
         } finally {
-            try { connection?.close() } catch (ignored: Exception) {}
+            usbMutex.unlock()
         }
     }
 
@@ -316,7 +337,8 @@ class KubaUsbManager(private val context: Context) {
         connection: UsbDeviceConnection,
         device: UsbDevice,
         packets: List<ByteArray>,
-        preset: Preset
+        preset: Preset,
+        isSilent: Boolean = false
     ): Result<Unit> {
         // Monta lista de interfaces priorizando HID, depois interfaces com INT endpoints
         val interfaces = buildList {
@@ -349,25 +371,18 @@ class KubaUsbManager(private val context: Context) {
             }
         }
 
-        Log.d(TAG, "Interfaces a tentar (${interfaces.size}): ${interfaces.map { "iface[${it.id}] class=${it.interfaceClass}" }}")
-
         var lastError = "Nenhuma interface encontrada no dispositivo"
 
         for (iface in interfaces) {
-            Log.d(TAG, "--- Tentando interface[${iface.id}] (class=${iface.interfaceClass}) ---")
-
             val claimed = connection.claimInterface(iface, true)
             if (!claimed) {
-                Log.w(TAG, "Falha ao reivindicar interface[${iface.id}] — pulando.")
                 lastError = "Falha ao reivindicar interface[${iface.id}]"
                 continue
             }
 
             try {
                 val outEndpoint = findInterruptOutEndpoint(iface)
-                Log.d(TAG, "Interface[${iface.id}] reivindicada. Endpoint INT OUT: ${outEndpoint?.address?.toString(16) ?: "nenhum"}")
-
-                val success = transmitPackets(connection, iface, outEndpoint, packets, preset)
+                val success = transmitPackets(connection, iface, outEndpoint, packets, preset, isSilent)
                 if (success) {
                     return Result.success(Unit)
                 } else {
@@ -390,17 +405,18 @@ class KubaUsbManager(private val context: Context) {
         iface: UsbInterface,
         outEndpoint: UsbEndpoint?,
         packets: List<ByteArray>,
-        preset: Preset
+        preset: Preset,
+        isSilent: Boolean = false
     ): Boolean {
         // Envia os 9 pacotes de dados com intervalo de 16 ms
         for ((index, packet) in packets.withIndex()) {
-            _connectionState.value = UsbConnectionState.Writing(
-                presetName = preset.name,
-                currentPacket = index + 1,
-                totalPackets = packets.size
-            )
-
-            Log.d(TAG, "Enviando pacote #${index} (${packet.size} bytes): ${packet.take(4).map { "0x${(it.toInt() and 0xFF).toString(16)}" }}")
+            if (!isSilent) {
+                _connectionState.value = UsbConnectionState.Writing(
+                    presetName = preset.name,
+                    currentPacket = index + 1,
+                    totalPackets = packets.size
+                )
+            }
 
             val sent = sendHidReport(connection, iface, outEndpoint, DspConstants.REPORT_ID, packet)
             if (!sent) {
@@ -415,7 +431,6 @@ class KubaUsbManager(private val context: Context) {
         delay(DspConstants.DELAY_BEFORE_APPLY_MS)
 
         // Envia o comando Apply (0x01, 0x65, 0x00, 0x01, 0xFF)
-        Log.i(TAG, "Enviando comando APPLY...")
         val applyOk = sendHidReport(
             connection, iface, outEndpoint,
             DspConstants.REPORT_ID, DspConstants.APPLY_PAYLOAD
@@ -425,6 +440,9 @@ class KubaUsbManager(private val context: Context) {
             Log.e(TAG, "Falha ao enviar comando APPLY.")
             return false
         }
+
+        // Aguarda estabilização pós-gravação de flash (permite ao DSP recarregar os registradores de áudio)
+        delay(250)
 
         return true
     }
