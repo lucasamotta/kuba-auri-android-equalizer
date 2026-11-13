@@ -40,7 +40,6 @@ import audio.kuba.equalizer.usb.UsbConnectionState
 @Composable
 fun ConnectionStatusCard(
     state: UsbConnectionState,
-    onRequestConnect: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isConnected = state is UsbConnectionState.Connected ||
@@ -88,41 +87,22 @@ fun ConnectionStatusCard(
 
         Spacer(modifier = Modifier.width(10.dp))
 
-        // Rótulo de status
+        // Rótulo de status simplificado
         val labelText = when (state) {
-            is UsbConnectionState.Connected -> "${state.productName} conectado"
-            is UsbConnectionState.Writing -> "Gravando ${state.presetName} (${state.currentPacket}/${state.totalPackets})…"
-            is UsbConnectionState.Success -> "Gravado no cabo com sucesso!"
-            is UsbConnectionState.DeviceDetected -> "Cabo detectado (solicitando permissão)"
+            is UsbConnectionState.Connected -> "Cabo conectado"
+            is UsbConnectionState.Writing -> "Gravando ${state.presetName}…"
+            is UsbConnectionState.Success -> "Cabo conectado"
+            is UsbConnectionState.DeviceDetected -> "Cabo detectado"
             is UsbConnectionState.PermissionDenied -> "Permissão USB negada"
-            is UsbConnectionState.Error -> "Erro USB: ${state.message}"
+            is UsbConnectionState.Error -> "Erro USB"
             is UsbConnectionState.Disconnected -> "Cabo desconectado"
         }
 
         Text(
             text = labelText,
             style = MaterialTheme.typography.labelSmall,
-            color = if (isConnected) KubaStatusOk else KubaTextMuted
+            color = if (isConnected) KubaStatusOk else KubaTextMuted,
+            maxLines = 1
         )
-
-        if (!isConnected) {
-            Spacer(modifier = Modifier.width(12.dp))
-            Button(
-                onClick = onRequestConnect,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = KubaAmber,
-                    contentColor = Color.Black
-                ),
-                shape = RoundedCornerShape(999.dp),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                modifier = Modifier.size(height = 30.dp, width = 120.dp)
-            ) {
-                Text(
-                    text = "Conectar",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.Black
-                )
-            }
-        }
     }
 }

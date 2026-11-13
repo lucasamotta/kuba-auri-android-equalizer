@@ -80,7 +80,7 @@ fun CustomBandSliders(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(200.dp),
+                    .height(145.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 for (i in 0 until 10) {

@@ -41,7 +41,8 @@ import kotlin.math.ln
 @Composable
 fun FrequencyGraph(
     preset: Preset,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isCompact: Boolean = false
 ) {
     val fMin = 20.0
     val fMax = 20000.0
@@ -63,17 +64,21 @@ fun FrequencyGraph(
 
     val frequencies = KubaMeasurement.frequencies
 
-    val targetLabel = if (preset.category == PresetCategory.PREFERENCE) {
+    val targetLabel = if (preset.category == PresetCategory.PREFERENCE || preset.category == PresetCategory.CUSTOM) {
         "Alvo JM-1"
     } else {
         if (preset.id == "harman") "Alvo Harman" else "Alvo ${preset.target}"
     }
 
+    val compactPadding = if (isCompact) 10.dp else 14.dp
+    val graphHeight = if (isCompact) 120.dp else 155.dp
+    val titleSize = if (isCompact) 18.sp else 22.sp
+
     Box(
         modifier = modifier
-            .border(1.dp, KubaBorderLine, RoundedCornerShape(20.dp))
-            .background(KubaSurface, RoundedCornerShape(20.dp))
-            .padding(18.dp)
+            .border(1.dp, KubaBorderLine, RoundedCornerShape(16.dp))
+            .background(KubaSurface, RoundedCornerShape(16.dp))
+            .padding(horizontal = compactPadding, vertical = if (isCompact) 8.dp else 10.dp)
     ) {
         Column {
             Row(
@@ -83,37 +88,38 @@ fun FrequencyGraph(
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = preset.name.uppercase(),
-                        style = MaterialTheme.typography.displayLarge.copy(fontSize = 30.sp),
+                        style = MaterialTheme.typography.displayLarge.copy(fontSize = titleSize),
                         color = KubaTextPrimary
                     )
                     Text(
                         text = "${preset.description} (Pré: ${preset.preDb} dB)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = KubaTextMuted
+                        style = MaterialTheme.typography.bodySmall,
+                        color = KubaTextMuted,
+                        maxLines = 1
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = targetLabel.uppercase(),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
                         color = KubaAmber
                     )
                     Text(
                         text = "RESPOSTA + ALVO",
-                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                         color = KubaTextMuted
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             // Canvas de Resposta de Frequência
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(210.dp)
+                    .height(graphHeight)
             ) {
                 val totalW = size.width
                 val totalH = size.height

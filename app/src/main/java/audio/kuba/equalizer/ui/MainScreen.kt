@@ -1,17 +1,17 @@
 package audio.kuba.equalizer.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -53,6 +54,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import audio.kuba.equalizer.dsp.Preset
 import audio.kuba.equalizer.dsp.PresetCategory
 import audio.kuba.equalizer.dsp.PresetRepository
 import audio.kuba.equalizer.ui.components.ConnectionStatusCard
@@ -84,7 +86,6 @@ fun MainScreen(
     val customPresets by viewModel.customPresets.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
-    val scrollState = rememberScrollState()
 
     LaunchedEffect(connectionState) {
         when (val state = connectionState) {
@@ -114,186 +115,35 @@ fun MainScreen(
             )
         }
     ) { innerPadding ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // 1. Cabeçalho da Marca & Status USB (Fixo no topo)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "KUBA",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp
-                        ),
-                        color = KubaAmber
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 10.dp)
-                            .size(width = 1.dp, height = 18.dp)
-                            .background(KubaBorderLine)
-                    )
-                    Text(
-                        text = "AURI DSP",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = KubaTextMuted
-                    )
-                }
+            val isLandscape = maxWidth > maxHeight && maxWidth > 600.dp
 
-                ConnectionStatusCard(
-                    state = connectionState,
-                    onRequestConnect = { viewModel.requestConnect() }
+            if (isLandscape) {
+                // === LAYOUT HORIZONTAL (LANDSCAPE / TABLETS EM MODO PAISAGEM) ===
+                LandscapeLayout(
+                    connectionState = connectionState,
+                    selectedPreset = selectedPreset,
+                    appliedPresetId = appliedPresetId,
+                    currentTab = currentTab,
+                    customGains = customGains,
+                    customPresets = customPresets,
+                    viewModel = viewModel
                 )
-            }
-
-            // 2. Gráfico de Resposta de Frequência (Sempre visível no topo)
-            Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-                FrequencyGraph(
-                    preset = selectedPreset,
-                    modifier = Modifier.fillMaxWidth()
+            } else {
+                // === LAYOUT VERTICAL (PORTRAIT / TABLETS EM MODO RETRATO) ===
+                PortraitLayout(
+                    connectionState = connectionState,
+                    selectedPreset = selectedPreset,
+                    appliedPresetId = appliedPresetId,
+                    currentTab = currentTab,
+                    customGains = customGains,
+                    customPresets = customPresets,
+                    viewModel = viewModel
                 )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // 3. Barra de Abas (Curvas Oficiais vs Equalizador Personalizado)
-            TabSelectorBar(
-                currentTab = currentTab,
-                onTabSelected = { viewModel.setTab(it) },
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 4. Conteúdo rolável da aba selecionada
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                if (currentTab == ScreenTab.PRESETS) {
-                    // === ABA 1: CURVAS OFICIAIS (Formato Horizontal) ===
-                    val prefPresets = PresetRepository.presets.filter { it.category == PresetCategory.PREFERENCE }
-                    val refPresets = PresetRepository.presets.filter { it.category == PresetCategory.REFERENCE }
-
-                    // Carrossel Horizontal: Curvas de Preferência
-                    HorizontalPresetSelector(
-                        title = "Curvas de Preferência",
-                        presets = prefPresets,
-                        selectedPresetId = selectedPreset.id,
-                        appliedPresetId = appliedPresetId,
-                        onSelectPreset = { viewModel.selectPreset(it) }
-                    )
-
-                    // Carrossel Horizontal: Curvas de Referência
-                    HorizontalPresetSelector(
-                        title = "Curvas de Referência",
-                        presets = refPresets,
-                        selectedPresetId = selectedPreset.id,
-                        appliedPresetId = appliedPresetId,
-                        onSelectPreset = { viewModel.selectPreset(it) }
-                    )
-
-                    // Carrossel Horizontal: Presets Customizados do Usuário (se existirem)
-                    if (customPresets.isNotEmpty()) {
-                        HorizontalPresetSelector(
-                            title = "Meus Presets Salvos",
-                            presets = customPresets,
-                            selectedPresetId = selectedPreset.id,
-                            appliedPresetId = appliedPresetId,
-                            onSelectPreset = { viewModel.selectPreset(it) },
-                            onDeleteCustomPreset = { viewModel.deleteCustomPreset(it) }
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(8.dp))
-                } else {
-                    // === ABA 2: EQUALIZADOR PERSONALIZADO (10 Bandas) ===
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        // Sliders interativos de 10 bandas
-                        CustomBandSliders(
-                            gains = customGains,
-                            onGainChanged = { index, gain ->
-                                viewModel.updateCustomBandGain(index, gain)
-                            }
-                        )
-
-                        // Ações de resetar e salvar preset
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { viewModel.resetCustomEq() },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = KubaTextMuted),
-                                border = ButtonDefaults.outlinedButtonBorder.copy(brush = androidx.compose.ui.graphics.SolidColor(KubaBorderLine))
-                            ) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Zerar", modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Zerar", fontSize = 13.sp)
-                            }
-
-                            Button(
-                                onClick = { viewModel.openSavePresetDialog() },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = KubaSurfaceSecondary,
-                                    contentColor = KubaAmber
-                                )
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = "Salvar", modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Salvar Preset", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-
-                        // Presets salvos pelo usuário para acesso rápido dentro da aba custom
-                        if (customPresets.isNotEmpty()) {
-                            Text(
-                                text = "PRESETS SALVOS",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = KubaTextMuted,
-                                modifier = Modifier.padding(top = 6.dp)
-                            )
-
-                            HorizontalPresetSelector(
-                                title = "Minhas Equalizações",
-                                presets = customPresets,
-                                selectedPresetId = selectedPreset.id,
-                                appliedPresetId = appliedPresetId,
-                                onSelectPreset = { preset ->
-                                    viewModel.selectPreset(preset)
-                                    // Sincroniza sliders com os ganhos do preset salvo selecionado
-                                    for (i in 0 until 10.coerceAtMost(preset.bands.size)) {
-                                        viewModel.updateCustomBandGain(i, preset.bands[i].gainDb)
-                                    }
-                                },
-                                onDeleteCustomPreset = { viewModel.deleteCustomPreset(it) }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-                    }
-                }
             }
         }
     }
@@ -347,9 +197,11 @@ fun MainScreen(
         )
     }
 
-    // Modal de Salvar Equalização Personalizada
+    // Modal de Salvar Equalização Personalizada (com nome e descrição)
     if (showSavePresetDialog) {
         var presetNameInput by remember { mutableStateOf("") }
+        var presetDescInput by remember { mutableStateOf("") }
+
         AlertDialog(
             onDismissRequest = { viewModel.dismissSavePresetDialog() },
             containerColor = KubaSurface,
@@ -362,18 +214,34 @@ fun MainScreen(
                 )
             },
             text = {
-                Column {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
-                        text = "Digite um nome para identificar este perfil de 10 bandas no app:",
+                        text = "Identifique este perfil de 10 bandas no app:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = KubaTextPrimary
                     )
-                    Spacer(modifier = Modifier.height(12.dp))
+
                     OutlinedTextField(
                         value = presetNameInput,
                         onValueChange = { presetNameInput = it },
                         singleLine = true,
+                        label = { Text("Nome da curva", color = KubaTextMuted) },
                         placeholder = { Text("Ex: Meu Rock, Bass Boost...", color = KubaTextMuted) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = KubaAmber,
+                            unfocusedBorderColor = KubaBorderLine,
+                            focusedTextColor = KubaTextPrimary,
+                            unfocusedTextColor = KubaTextPrimary
+                        ),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = presetDescInput,
+                        onValueChange = { presetDescInput = it },
+                        singleLine = true,
+                        label = { Text("Breve descrição (opcional)", color = KubaTextMuted) },
+                        placeholder = { Text("Padrão: Equalização criada pelo usuário", color = KubaTextMuted) },
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = KubaAmber,
                             unfocusedBorderColor = KubaBorderLine,
@@ -386,7 +254,7 @@ fun MainScreen(
             },
             confirmButton = {
                 Button(
-                    onClick = { viewModel.saveCustomPreset(presetNameInput) },
+                    onClick = { viewModel.saveCustomPreset(presetNameInput, presetDescInput) },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = KubaAmber,
                         contentColor = Color.Black
@@ -411,6 +279,370 @@ fun MainScreen(
             }
         )
     }
+}
+
+@Composable
+private fun PortraitLayout(
+    connectionState: UsbConnectionState,
+    selectedPreset: Preset,
+    appliedPresetId: String?,
+    currentTab: ScreenTab,
+    customGains: DoubleArray,
+    customPresets: List<Preset>,
+    viewModel: MainViewModel
+) {
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .widthIn(max = 840.dp)
+    ) {
+        // 1. Cabeçalho da Marca & Status USB
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "KUBA",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp
+                    ),
+                    color = KubaAmber
+                )
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 10.dp)
+                        .size(width = 1.dp, height = 18.dp)
+                        .background(KubaBorderLine)
+                )
+                Text(
+                    text = "AURI DSP",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = KubaTextMuted
+                )
+            }
+
+            ConnectionStatusCard(state = connectionState)
+        }
+
+        // 2. Gráfico de Resposta de Frequência (Compacto para não ocupar tela excessiva)
+        Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)) {
+            FrequencyGraph(
+                preset = selectedPreset,
+                modifier = Modifier.fillMaxWidth(),
+                isCompact = true
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // 3. Barra de Abas
+        TabSelectorBar(
+            currentTab = currentTab,
+            onTabSelected = { viewModel.setTab(it) },
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // 4. Conteúdo
+        if (currentTab == ScreenTab.PRESETS) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                val prefPresets = PresetRepository.presets.filter { it.category == PresetCategory.PREFERENCE }
+                val refPresets = PresetRepository.presets.filter { it.category == PresetCategory.REFERENCE }
+
+                HorizontalPresetSelector(
+                    title = "Curvas de Preferência",
+                    presets = prefPresets,
+                    selectedPresetId = selectedPreset.id,
+                    appliedPresetId = appliedPresetId,
+                    onSelectPreset = { viewModel.selectPreset(it) }
+                )
+
+                HorizontalPresetSelector(
+                    title = "Curvas de Referência",
+                    presets = refPresets,
+                    selectedPresetId = selectedPreset.id,
+                    appliedPresetId = appliedPresetId,
+                    onSelectPreset = { viewModel.selectPreset(it) }
+                )
+
+                if (customPresets.isNotEmpty()) {
+                    HorizontalPresetSelector(
+                        title = "Meus Presets Salvos",
+                        presets = customPresets,
+                        selectedPresetId = selectedPreset.id,
+                        appliedPresetId = appliedPresetId,
+                        onSelectPreset = { viewModel.selectPreset(it) },
+                        onDeleteCustomPreset = { viewModel.deleteCustomPreset(it) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+        } else {
+            // Equalizador Personalizado: Barra de ações no topo + sliders fixos (sem rolagem conflitante)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Ações de Zerar e Salvar Preset acima dos sliders
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { viewModel.resetCustomEq() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = KubaTextMuted),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, KubaBorderLine)
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Zerar", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Zerar", fontSize = 13.sp)
+                    }
+
+                    Button(
+                        onClick = { viewModel.openSavePresetDialog() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = KubaSurfaceSecondary,
+                            contentColor = KubaAmber
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Salvar", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Salvar Preset", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Sliders de 10 bandas
+                CustomBandSliders(
+                    gains = customGains,
+                    onGainChanged = { index, gain ->
+                        viewModel.updateCustomBandGain(index, gain)
+                    }
+                )
+
+                // Presets salvos pelo usuário (se houver) em carrossel horizontal
+                if (customPresets.isNotEmpty()) {
+                    HorizontalPresetSelector(
+                        title = "Minhas Equalizações Salvas",
+                        presets = customPresets,
+                        selectedPresetId = selectedPreset.id,
+                        appliedPresetId = appliedPresetId,
+                        onSelectPreset = { preset ->
+                            viewModel.selectPreset(preset)
+                            for (i in 0 until 10.coerceAtMost(preset.bands.size)) {
+                                viewModel.updateCustomBandGain(i, preset.bands[i].gainDb)
+                            }
+                        },
+                        onDeleteCustomPreset = { viewModel.deleteCustomPreset(it) }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun LandscapeLayout(
+    connectionState: UsbConnectionState,
+    selectedPreset: Preset,
+    appliedPresetId: String?,
+    currentTab: ScreenTab,
+    customGains: DoubleArray,
+    customPresets: List<Preset>,
+    viewModel: MainViewModel
+) {
+    val scrollState = rememberScrollState()
+
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // === COLUNA ESQUERDA: MARCA, STATUS E GRÁFICO ===
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "KUBA",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.sp
+                        ),
+                        color = KubaAmber
+                    )
+                    Box(
+                        modifier = Modifier
+                            .padding(horizontal = 10.dp)
+                            .size(width = 1.dp, height = 18.dp)
+                            .background(KubaBorderLine)
+                    )
+                    Text(
+                        text = "AURI DSP",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = KubaTextMuted
+                    )
+                }
+
+                ConnectionStatusCard(state = connectionState)
+            }
+
+            FrequencyGraph(
+                preset = selectedPreset,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                isCompact = false
+            )
+        }
+
+        // === COLUNA DIREITA: ABAS E CONTROLES DE OPERAÇÃO ===
+        Column(
+            modifier = Modifier
+                .weight(1.15f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            TabSelectorBar(
+                currentTab = currentTab,
+                onTabSelected = { viewModel.setTab(it) }
+            )
+
+            if (currentTab == ScreenTab.PRESETS) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    val prefPresets = PresetRepository.presets.filter { it.category == PresetCategory.PREFERENCE }
+                    val refPresets = PresetRepository.presets.filter { it.category == PresetCategory.REFERENCE }
+
+                    HorizontalPresetSelector(
+                        title = "Curvas de Preferência",
+                        presets = prefPresets,
+                        selectedPresetId = selectedPreset.id,
+                        appliedPresetId = appliedPresetId,
+                        onSelectPreset = { viewModel.selectPreset(it) }
+                    )
+
+                    HorizontalPresetSelector(
+                        title = "Curvas de Referência",
+                        presets = refPresets,
+                        selectedPresetId = selectedPreset.id,
+                        appliedPresetId = appliedPresetId,
+                        onSelectPreset = { viewModel.selectPreset(it) }
+                    )
+
+                    if (customPresets.isNotEmpty()) {
+                        HorizontalPresetSelector(
+                            title = "Meus Presets Salvos",
+                            presets = customPresets,
+                            selectedPresetId = selectedPreset.id,
+                            appliedPresetId = appliedPresetId,
+                            onSelectPreset = { viewModel.selectPreset(it) },
+                            onDeleteCustomPreset = { viewModel.deleteCustomPreset(it) }
+                        )
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { viewModel.resetCustomEq() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = KubaTextMuted),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, KubaBorderLine)
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = "Zerar", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Zerar", fontSize = 13.sp)
+                        }
+
+                        Button(
+                            onClick = { viewModel.openSavePresetDialog() },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = KubaSurfaceSecondary,
+                                contentColor = KubaAmber
+                            )
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Salvar", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Salvar Preset", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    CustomBandSliders(
+                        gains = customGains,
+                        onGainChanged = { index, gain ->
+                            viewModel.updateCustomBandGain(index, gain)
+                        }
+                    )
+
+                    if (customPresets.isNotEmpty()) {
+                        HorizontalPresetSelector(
+                            title = "Minhas Equalizações Salvas",
+                            presets = customPresets,
+                            selectedPresetId = selectedPreset.id,
+                            appliedPresetId = appliedPresetId,
+                            onSelectPreset = { preset ->
+                                viewModel.selectPreset(preset)
+                                for (i in 0 until 10.coerceAtMost(preset.bands.size)) {
+                                viewModel.updateCustomBandGain(i, preset.bands[i].gainDb)
+                            }
+                        },
+                        onDeleteCustomPreset = { viewModel.deleteCustomPreset(it) }
+                    )
+                }
+            }
+        }
+    }
+}
 }
 
 @Composable
@@ -484,7 +716,7 @@ fun BottomApplyBar(
             .fillMaxWidth()
             .border(width = 1.dp, color = KubaBorderLine, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
             .background(Color(0xE60F0E0B))
-            .padding(horizontal = 20.dp, vertical = 14.dp)
+            .padding(horizontal = 20.dp, vertical = 12.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -499,7 +731,7 @@ fun BottomApplyBar(
                 )
                 Text(
                     text = selectedName.uppercase(),
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 18.sp),
                     color = KubaTextPrimary,
                     maxLines = 1
                 )
@@ -514,11 +746,11 @@ fun BottomApplyBar(
                     disabledContainerColor = KubaAmber.copy(alpha = 0.5f)
                 ),
                 shape = RoundedCornerShape(999.dp),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp)
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
             ) {
                 if (isWriting) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                         color = Color.Black,
                         strokeWidth = 2.dp
                     )
@@ -526,14 +758,14 @@ fun BottomApplyBar(
                     Text(
                         text = "Gravando…",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         color = Color.Black
                     )
                 } else {
                     Text(
                         text = "Gravar no cabo",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         color = Color.Black
                     )
                 }

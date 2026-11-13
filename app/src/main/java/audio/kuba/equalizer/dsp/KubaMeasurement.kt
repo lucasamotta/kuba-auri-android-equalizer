@@ -153,7 +153,8 @@ object KubaMeasurement {
 
     /**
      * Retorna a curva alvo para exibição no gráfico.
-     * Para as curvas de preferência, o web-app usa 'padrao' (JM-1), exceto Harman que usa 'harman'.
+     * Para as curvas de preferência e customizadas, a referência oficial é 'padrao' (JM-1).
+     * Harman usa 'harman', Referência usa 'referencia', Basshead usa 'basshead', Analítico usa 'analitico'.
      */
     fun getTargetCurve(preset: Preset): DoubleArray {
         return when (preset.id) {
@@ -161,7 +162,7 @@ object KubaMeasurement {
             "referencia" -> targetReferencia
             "basshead" -> targetBasshead
             "analitico" -> targetAnalitico
-            else -> targetPadrao
+            else -> targetPadrao // Sempre JM-1 para Auri, Natural, Em V, Enérgico, Musical e CUSTOM (equalizador personalizado)
         }
     }
 

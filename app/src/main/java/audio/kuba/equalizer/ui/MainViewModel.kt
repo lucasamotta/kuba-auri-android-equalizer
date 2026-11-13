@@ -106,7 +106,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             name = "Personalizado",
             description = "Equalização paramétrica em tempo real",
             category = PresetCategory.CUSTOM,
-            target = "Custom",
+            target = "JM-1",
             preDb = pre,
             bands = bands
         )
@@ -121,8 +121,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _showSavePresetDialog.value = false
     }
 
-    fun saveCustomPreset(name: String) {
-        val trimmed = name.trim().ifEmpty { "Personalizado ${_customPresets.value.size + 1}" }
+    fun saveCustomPreset(name: String, description: String = "") {
+        val trimmedName = name.trim().ifEmpty { "Personalizado ${_customPresets.value.size + 1}" }
+        val trimmedDesc = description.trim().ifEmpty { "Equalização criada pelo usuário" }
         val gains = _customGains.value.copyOf()
         val bands = CustomEqConstants.createBands(gains)
         val pre = CustomEqConstants.calculateAutoPreDb(gains)
@@ -130,10 +131,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val newId = "custom_${System.currentTimeMillis()}"
         val newPreset = Preset(
             id = newId,
-            name = trimmed,
-            description = "Equalização criada pelo usuário",
+            name = trimmedName,
+            description = trimmedDesc,
             category = PresetCategory.CUSTOM,
-            target = "Custom",
+            target = "JM-1",
             preDb = pre,
             bands = bands
         )
@@ -216,7 +217,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         name = name,
                         description = desc,
                         category = PresetCategory.CUSTOM,
-                        target = "Custom",
+                        target = "JM-1",
                         preDb = pre,
                         bands = bands
                     )
